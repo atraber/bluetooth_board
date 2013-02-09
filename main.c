@@ -42,65 +42,67 @@ bd_addr_t event_addr;
 
 static void bt_packet_handler (void * connection, uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size)
 {
-
 	switch (packet_type)
 	{
-		case HCI_EVENT_PACKET:
-			hexdump( packet, size ); // COMMENT?
-			switch (packet[0]) {
+	case HCI_EVENT_PACKET:
+		// hexdump( packet, size ); // not needed?
+		switch (packet[0])
+		{
+		case BTSTACK_EVENT_POWERON_FAILED:
+			printf("HCI Init failed - make sure you have turned off Bluetooth in the System Settings\n");
+			exit(1);
+			break;
 
-				case BTSTACK_EVENT_POWERON_FAILED:
-					printf("HCI Init failed - make sure you have turned off Bluetooth in the System Settings\n");
-					exit(1);
-					break;
-
-				case BTSTACK_EVENT_STATE:
-					// bt stack activated, get started - set local name
-					if (packet[2] == HCI_STATE_WORKING) {
-                        hci_send_cmd(&hci_write_local_name, "RASP BT");
-					}
-					break;
-
-				case HCI_EVENT_COMMAND_COMPLETE:
-					if (COMMAND_COMPLETE_EVENT(packet, hci_read_bd_addr)){
-                        bt_flip_addr(event_addr, &packet[6]);
-                        printf("BD-ADDR: %s\n\r", bd_addr_to_str(event_addr));
-                        break;
-                    }
-					if (COMMAND_COMPLETE_EVENT(packet, hci_write_local_name)){
-                        hci_discoverable_control(1);
-                        break;
-                    }
-                    break;
-
-				case HCI_EVENT_LINK_KEY_REQUEST:
-					// deny link key request
-                    printf("Link key request\n\r");
-                    bt_flip_addr(event_addr, &packet[2]);
-					hci_send_cmd(&hci_link_key_request_negative_reply, &event_addr);
-					break;
-
-				case HCI_EVENT_PIN_CODE_REQUEST:
-					// inform about pin code request
-                    printf("Pin code request using '0943'\n\r");
-                    bt_flip_addr(event_addr, &packet[2]);
-					hci_send_cmd(&hci_pin_code_request_reply, &event_addr, 4, "0943");
-					break;
-
-				case HCI_EVENT_DISCONNECTION_COMPLETE:
-					// connection closed -> quit tes app
-					printf("Basebank connection closed\n");
-
-					// exit(0);
-					break;
-
-                default:
-                    break;
+		case BTSTACK_EVENT_STATE:
+			// bt stack activated, get started - set local name
+			if (packet[2] == HCI_STATE_WORKING)
+			{
+				hci_send_cmd(&hci_write_local_name, "RASP BT");
 			}
-            break;
+			break;
 
-        default:
-            break;
+		case HCI_EVENT_COMMAND_COMPLETE:
+			if (COMMAND_COMPLETE_EVENT(packet, hci_read_bd_addr))
+			{
+				bt_flip_addr(event_addr, &packet[6]);
+				printf("BD-ADDR: %s\n\r", bd_addr_to_str(event_addr));
+				break;
+			}
+			if (COMMAND_COMPLETE_EVENT(packet, hci_write_local_name))
+			{
+				hci_discoverable_control(1);
+				break;
+			}
+			break;
+
+		case HCI_EVENT_LINK_KEY_REQUEST:
+			// deny link key request
+			printf("Link key request\n\r");
+			bt_flip_addr(event_addr, &packet[2]);
+			hci_send_cmd(&hci_link_key_request_negative_reply, &event_addr);
+			break;
+
+		case HCI_EVENT_PIN_CODE_REQUEST:
+			// inform about pin code request
+			printf("Pin code request using '0943'\n\r");
+			bt_flip_addr(event_addr, &packet[2]);
+			hci_send_cmd(&hci_pin_code_request_reply, &event_addr, 4, "0943");
+			break;
+
+		case HCI_EVENT_DISCONNECTION_COMPLETE:
+			// connection closed -> quit tes app
+			printf("Basebank connection closed\n");
+
+			// exit(0);
+			break;
+
+		default:
+			break;
+		}
+		break;
+
+	default:
+		break;
 	}
 }
 

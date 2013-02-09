@@ -1,5 +1,4 @@
 
-//#include "msp430f5438a.h"
 #include <msp430x54x.h>
 #include <stdio.h>
 
@@ -13,8 +12,12 @@ int seq;
 int ownseq = 0;
 unsigned int chan;
 
-//variables used temporary but initialized only once
-unsigned char packet[256];
+// variables used temporary but initialized only once
+unsigned char packet[L2CAP_MINIMAL_MTU];
+
+
+int l2cap_send_queued(uint16_t local_cid, uint8_t *data, uint16_t len);
+
 
 void send_bt_request(unsigned char payload[], int paylen)
 {
@@ -25,11 +28,9 @@ void send_bt_request(unsigned char payload[], int paylen)
 	memcpy(&packet[3], payload, paylen);
 	//send packet
 
-	// wait for credits
-	//while(l2cap_can_send_packet_now(chan) == 0);
-
 	// actually send the packet
-	l2cap_send_internal(chan, packet, paylen+3);
+	l2cap_send_queued(chan, packet, paylen+3);
+
 	//update ownseq
 	ownseq++;
 	if (ownseq==0xff) //if 0xff reset
@@ -45,11 +46,8 @@ void send_bt_response(unsigned char payload[], int paylen)
 	memcpy(&packet[3], payload, paylen);
 	//send packet
 
-	// wait for credits
-	//while(l2cap_can_send_packet_now(chan) == 0);
-
 	// actually send the packet
-	l2cap_send_internal(chan, packet, paylen+3);
+	l2cap_send_queued(chan, packet, paylen+3);
 	//update ownseq
 	ownseq++;
 	if (ownseq==0xff) //if 0xff reset
@@ -191,7 +189,74 @@ int port2_poll(struct data_source *ds)
 }
 
 
-bd_addr_t event_addr;
+
+struct l2cap_packet
+{
+	uint16_t local_cid;
+	uint8_t data[L2CAP_MINIMAL_MTU];
+	uint16_t len;
+};
+
+#define QUEUE_SIZE 10
+
+struct l2cap_packet l2cap_packet_queue[QUEUE_SIZE];
+unsigned char l2cap_queue_index_insert;
+unsigned char l2cap_queue_index_remove;
+
+inline int l2cap_queue_full()
+{
+	return (10 + l2cap_queue_index_remove - l2cap_queue_index_insert) % QUEUE_SIZE == 1;
+}
+
+void l2cap_try_send_queued()
+{
+	if(l2cap_queue_index_insert == l2cap_queue_index_remove)
+		return; // nothing to do, queue is empty
+
+	if(l2cap_can_send_packet_now(l2cap_packet_queue[l2cap_queue_index_remove].local_cid))
+	{
+		l2cap_send_internal(l2cap_packet_queue[l2cap_queue_index_remove].local_cid, l2cap_packet_queue[l2cap_queue_index_remove].data, l2cap_packet_queue[l2cap_queue_index_remove].len);
+
+		l2cap_queue_index_remove = (l2cap_queue_index_remove + 1) % QUEUE_SIZE;
+	}
+}
+
+// returns 1 if packet can be sent, 0 if queue is full
+int l2cap_send_queued(uint16_t local_cid, uint8_t *data, uint16_t len)
+{
+	l2cap_try_send_queued();
+
+	if(l2cap_queue_full())
+	{
+		printf("Queue is full, cannot send\n");
+		return 0; // queue is full
+	}
+
+	if(l2cap_queue_index_insert == l2cap_queue_index_remove && l2cap_can_send_packet_now(local_cid))
+	{
+		// packet can be sent directly as queue is empty
+		printf("Packet sent directly\n");
+		l2cap_send_internal(local_cid, data, len);
+
+		return 1;
+	}
+	else
+	{
+		// insert packet into queue
+		printf("Insert packet into queue\n");
+
+		l2cap_packet_queue[l2cap_queue_index_insert].local_cid = local_cid;
+		memcpy(l2cap_packet_queue[l2cap_queue_index_insert].data, data, len);
+		l2cap_packet_queue[l2cap_queue_index_insert].len = len;
+
+		l2cap_queue_index_insert = (l2cap_queue_index_insert + 1) % QUEUE_SIZE;
+
+		return 1;
+	}
+}
+
+
+extern bd_addr_t event_addr;
 
 // Bluetooth logic
 void l2cap_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size)
@@ -200,35 +265,43 @@ void l2cap_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet
     {
     	switch(packet[0])
     	{
-    		case L2CAP_EVENT_INCOMING_CONNECTION:
-    		// data: event(8), len(8), address(48), handle (16),  psm (16), source cid(16) dest cid(16)
-    			bt_flip_addr(event_addr, &packet[2]);
-    			printf("L2CAP_EVENT_INCOMING_CONNECTION from %s, \n", bd_addr_to_str(event_addr));
-    			// accept
-    			l2cap_accept_connection_internal(channel);
-    			break;
+		case L2CAP_EVENT_INCOMING_CONNECTION:
+		// data: event(8), len(8), address(48), handle (16),  psm (16), source cid(16) dest cid(16)
+			bt_flip_addr(event_addr, &packet[2]);
+			printf("L2CAP_EVENT_INCOMING_CONNECTION from %s, \n", bd_addr_to_str(event_addr));
+			// accept
+			l2cap_accept_connection_internal(channel);
+			break;
 
-    		case L2CAP_EVENT_CHANNEL_OPENED:
-    		// inform about new l2cap connection
-    			if (packet[2] == 0)
-    			{
+		case L2CAP_EVENT_CHANNEL_OPENED:
+			// inform about new l2cap connection
+			if (packet[2] == 0)
+			{
+				printf("Channel successfully opened to %s\n", bd_addr_to_str(event_addr));
 
-    				printf("Channel successfully opened to %s\n", bd_addr_to_str(event_addr));
-    				chan=channel;
-    			}
-    			else
-    			{
-    				printf("L2CAP connection to device %s failed. status code %u\n", bd_addr_to_str(event_addr), packet[2]);
-    				exit(1);
-    			}
-    			break;
+				// initialize values for new channel, old channel (if any) will no longer be used
+				chan = channel;
 
-    		case L2CAP_EVENT_CHANNEL_CLOSED:
-    		//channel closed
-				printf("L2CAP channel closed");
-				break;
+				l2cap_queue_index_insert = 0;
+				l2cap_queue_index_remove = 0;
+			}
+			else
+			{
+				printf("L2CAP connection to device %s failed. status code %u\n", bd_addr_to_str(event_addr), packet[2]);
+				exit(1);
+			}
+			break;
 
-    		default: break;
+		case L2CAP_EVENT_CHANNEL_CLOSED:
+			//channel closed
+			printf("L2CAP channel closed");
+			break;
+
+		case L2CAP_EVENT_CREDITS:
+			l2cap_try_send_queued();
+			break;
+
+		default: break;
     	}
     }
 
