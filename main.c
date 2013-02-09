@@ -1,23 +1,23 @@
 
 //*****************************************************************************
 //
-// initialising of bluetooth module and handling of connections
+// initializing of bluetooth module and handling of connections
 //
 // two different handlers are needed, one for hci and another one for l2cap
-// you can now implement your own protocoll on l2cap (section L2CAP_DATA_PACKET)
+// you can now implement your own protocol on l2cap (section L2CAP_DATA_PACKET)
 //
 //*****************************************************************************
 
-//std libraries
+// std libraries
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-//ti chip specific library
+// ti chip specific library
 #include <msp430x54x.h>
 
-//bt-stack libraries
+// bt-stack libraries
 #include "bt_control_cc256x.h"
 #include "hal_board.h"
 #include "hal_compat.h"
@@ -33,71 +33,12 @@
 #include "sdp.h"
 #include "config.h"
 
-//own libraries
+// own libraries
 #include "i2c_lib.h"
 #include "protocol.h"
 #include "library.h"
 
-// maximum l2cap packet size
-const uint16_t  mtu = 0xffff;
-
-// bluetooth channel
-extern unsigned int chan;
-
-//value of port2 input
-unsigned int port2_status;
-
 bd_addr_t event_addr;
-
-// Bluetooth logic
-static void l2cap_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size)
-{
-    if (packet_type == HCI_EVENT_PACKET)
-    {
-    	switch(packet[0])
-    	{
-    		case L2CAP_EVENT_INCOMING_CONNECTION:
-    		// data: event(8), len(8), address(48), handle (16),  psm (16), source cid(16) dest cid(16)
-    			bt_flip_addr(event_addr, &packet[2]);
-    			printf("L2CAP_EVENT_INCOMING_CONNECTION from %s, \n", bd_addr_to_str(event_addr));
-    			// accept
-    			l2cap_accept_connection_internal(channel);
-    			break;
-
-    		case L2CAP_EVENT_CHANNEL_OPENED:
-    		// inform about new l2cap connection
-    			if (packet[2] == 0)
-    			{
-
-    				printf("Channel successfully opened to %s\n", bd_addr_to_str(event_addr));
-    				chan=channel;
-    			}
-    			else
-    			{
-    				printf("L2CAP connection to device %s failed. status code %u\n", bd_addr_to_str(event_addr), packet[2]);
-    				exit(1);
-    			}
-    			break;
-
-    		case L2CAP_EVENT_CHANNEL_CLOSED:
-    		//channel closed
-				printf("L2CAP channel closed");
-				break;
-
-    		default: break;
-    	}
-    }
-
-    if (packet_type == L2CAP_DATA_PACKET)
-    {
-    	// protocol function
-    	protocol(packet, size, channel);
-    	l2cap_hand_out_credits();
-    	//printf("source cid %x -- ", channel);
-    	//hexdump( packet, size );
-    }
-}
-
 
 static void bt_packet_handler (void * connection, uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size)
 {
@@ -105,7 +46,7 @@ static void bt_packet_handler (void * connection, uint8_t packet_type, uint16_t 
 	switch (packet_type)
 	{
 		case HCI_EVENT_PACKET:
-			hexdump( packet, size );
+			hexdump( packet, size ); // COMMENT?
 			switch (packet[0]) {
 
 				case BTSTACK_EVENT_POWERON_FAILED:
@@ -163,19 +104,7 @@ static void bt_packet_handler (void * connection, uint8_t packet_type, uint16_t 
 	}
 }
 
-int  port2_poll(struct data_source *ds)
-{
-	if((P2IN & 0x0F) != port2_status)
-	{
-		// only check first 4 bits, ignore rest
-		port2_status = P2IN & 0x0F;
-		printf("status sent\n");
-		send_port2_status(port2_status, chan);
-	}
-	return 0;
-}
-
-
+extern unsigned int port2_status;
 
 // main
 int main(void)
@@ -218,12 +147,12 @@ int main(void)
 	btstack_memory_init();
     run_loop_init(RUN_LOOP_EMBEDDED);
 
-    //add gpio port 2 to run loop
+    // add gpio port 2 to run loop
     // default values
     port2_status = P2IN & 0x0F;
 
     data_source_t data_src_port2;
-    data_src_port2.process=port2_poll;
+    data_src_port2.process = port2_poll;
     data_src_port2.fd = 0;
     run_loop_add_data_source(&data_src_port2);
 
@@ -241,7 +170,7 @@ int main(void)
     // init L2CAP
     l2cap_init();
     l2cap_register_packet_handler(bt_packet_handler);
-    l2cap_register_service_internal(NULL, l2cap_packet_handler, 0x1001, mtu);
+    l2cap_register_service_internal(NULL, l2cap_packet_handler, 0x1001, L2CAP_MINIMAL_MTU);
 
     // ready - enable irq used in h4 task
     __enable_interrupt();

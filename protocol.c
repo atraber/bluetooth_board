@@ -1,5 +1,8 @@
 
-#include "msp430f5438a.h"
+//#include "msp430f5438a.h"
+#include <msp430x54x.h>
+#include <stdio.h>
+
 #include "i2c_lib.h"
 #include "l2cap.h"
 
@@ -168,3 +171,74 @@ void send_port2_status(int port_stat, unsigned int channel)
 	type = 1;
 	gpio_send(0, port_stat);
 }
+
+
+
+//value of port2 input
+unsigned int port2_status;
+
+int port2_poll(struct data_source *ds)
+{
+	if((P2IN & 0x0F) != port2_status)
+	{
+		// only check first 4 bits, ignore rest
+		port2_status = P2IN & 0x0F;
+		printf("status sent\n");
+		send_port2_status(port2_status, chan);
+	}
+
+	return 0;
+}
+
+
+bd_addr_t event_addr;
+
+// Bluetooth logic
+void l2cap_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size)
+{
+    if (packet_type == HCI_EVENT_PACKET)
+    {
+    	switch(packet[0])
+    	{
+    		case L2CAP_EVENT_INCOMING_CONNECTION:
+    		// data: event(8), len(8), address(48), handle (16),  psm (16), source cid(16) dest cid(16)
+    			bt_flip_addr(event_addr, &packet[2]);
+    			printf("L2CAP_EVENT_INCOMING_CONNECTION from %s, \n", bd_addr_to_str(event_addr));
+    			// accept
+    			l2cap_accept_connection_internal(channel);
+    			break;
+
+    		case L2CAP_EVENT_CHANNEL_OPENED:
+    		// inform about new l2cap connection
+    			if (packet[2] == 0)
+    			{
+
+    				printf("Channel successfully opened to %s\n", bd_addr_to_str(event_addr));
+    				chan=channel;
+    			}
+    			else
+    			{
+    				printf("L2CAP connection to device %s failed. status code %u\n", bd_addr_to_str(event_addr), packet[2]);
+    				exit(1);
+    			}
+    			break;
+
+    		case L2CAP_EVENT_CHANNEL_CLOSED:
+    		//channel closed
+				printf("L2CAP channel closed");
+				break;
+
+    		default: break;
+    	}
+    }
+
+    if (packet_type == L2CAP_DATA_PACKET)
+    {
+    	// protocol function
+    	protocol(packet, size, channel);
+    	l2cap_hand_out_credits();
+    	//printf("source cid %x -- ", channel);
+    	//hexdump( packet, size );
+    }
+}
+
