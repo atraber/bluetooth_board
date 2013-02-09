@@ -10,7 +10,7 @@ int seq;
 int ownseq = 0;
 unsigned int chan;
 
-//variables used termporally but initialised only once
+//variables used temporary but initialized only once
 unsigned char packet[256];
 
 void send_bt_request(unsigned char payload[], int paylen)
@@ -19,7 +19,7 @@ void send_bt_request(unsigned char payload[], int paylen)
 	packet[0] = (type<<5) | (paylen+3);
 	packet[1]=  ownseq;
 	packet[2] = 0xff;
-	memcpy(&packet[3], payload, paylen); 		//int i; for (i=0; i<paylen; i++) packet[i+3] = payload[i];
+	memcpy(&packet[3], payload, paylen);
 	//send packet
 
 	// wait for credits
@@ -39,7 +39,7 @@ void send_bt_response(unsigned char payload[], int paylen)
 	packet[0] = (type<<5) | (paylen+3);
 	packet[1]=  ownseq;
 	packet[2] = seq;
-	memcpy(&packet[3], payload, paylen);		//int i; for (i=0; i<paylen; i++) packet[i+3] = payload[i];
+	memcpy(&packet[3], payload, paylen);
 	//send packet
 
 	// wait for credits
@@ -149,16 +149,16 @@ void protocol(unsigned char packet[], unsigned int size, unsigned int channel)
 	chan = channel;
 	switch (type)
 	{
-		case 0:	//i2c
-			i2c_packet(&packet[3], size-3);
-			break;
+	case 0:	//i2c
+		i2c_packet(&packet[3], size-3);
+		break;
 
-		case 1:	//gpio
-			gpio_request(&packet[3]);
-			break;
+	case 1:	//gpio
+		gpio_request(&packet[3]);
+		break;
 
-		default:
-			break;
+	default:
+		break;
 	}
 }
 

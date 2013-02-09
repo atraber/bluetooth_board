@@ -38,10 +38,10 @@
 #include "protocol.h"
 #include "library.h"
 
-//maximum l2cap packet size
+// maximum l2cap packet size
 const uint16_t  mtu = 0xffff;
 
-//bluetooth channel
+// bluetooth channel
 extern unsigned int chan;
 
 //value of port2 input
@@ -90,7 +90,7 @@ static void l2cap_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t 
 
     if (packet_type == L2CAP_DATA_PACKET)
     {
-    	// protocoll function
+    	// protocol function
     	protocol(packet, size, channel);
     	l2cap_hand_out_credits();
     	//printf("source cid %x -- ", channel);
@@ -252,11 +252,6 @@ int main(void)
 
 	//init i2c
 	initi2c();
-
-	/*
-	char txData[] = {0x00, 0x00};
-
-	while(1) sendi2c(0x6C, txData, sizeof txData);*/
 
     // go!
     run_loop_execute();
