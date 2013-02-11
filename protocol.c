@@ -126,12 +126,16 @@ void gpio_send(int resp, int port_stat)
 {
 	if (resp)
 	{
-		unsigned char payload[] = {(resp << 7) | 2, ~port_stat}; //value has to be inverted as we detect low
+		unsigned char payload[2];
+		payload[0] = (resp << 7) | 2;
+		payload[1] = ~port_stat; //value has to be inverted as we detect low
 		send_bt_response(payload, 2);
 	}
 	else
 	{
-		unsigned char payload[] = {(resp << 7) | 2, ~port_stat}; //value has to be inverted as we detect low
+		unsigned char payload[2];
+		payload[0] = (resp << 7) | 2;
+		payload[1] = ~port_stat; //value has to be inverted as we detect low
 		send_bt_request(payload, 2);
 	}
 }
@@ -205,7 +209,7 @@ unsigned char l2cap_queue_index_remove;
 
 inline int l2cap_queue_full()
 {
-	return (10 + l2cap_queue_index_remove - l2cap_queue_index_insert) % QUEUE_SIZE == 1;
+	return (QUEUE_SIZE + l2cap_queue_index_remove - l2cap_queue_index_insert) % QUEUE_SIZE == 1;
 }
 
 void l2cap_try_send_queued()
@@ -266,7 +270,7 @@ void l2cap_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet
     	switch(packet[0])
     	{
 		case L2CAP_EVENT_INCOMING_CONNECTION:
-		// data: event(8), len(8), address(48), handle (16),  psm (16), source cid(16) dest cid(16)
+			// data: event(8), len(8), address(48), handle (16),  psm (16), source cid(16) dest cid(16)
 			bt_flip_addr(event_addr, &packet[2]);
 			printf("L2CAP_EVENT_INCOMING_CONNECTION from %s, \n", bd_addr_to_str(event_addr));
 			// accept

@@ -29,8 +29,6 @@
 #include "l2cap.h"
 #include "btstack_memory.h"
 #include "remote_device_db.h"
-#include "rfcomm.h"
-#include "sdp.h"
 #include "config.h"
 
 // own libraries
